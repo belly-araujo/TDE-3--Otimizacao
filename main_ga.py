@@ -1,27 +1,30 @@
 """
 main_ga.py — Integrante 3
 """
-
+from data.loader import carregar_fashion_mnist, preprocessar, CLASSES
 import time
 import numpy as np
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score, classification_report
+from sklearn.model_selection import train_test_split
 
 from data.loader import carregar_fashion_mnist, preprocessar
 from results.exporter import salvar_txt, salvar_npy
 
 # Configuração 
 DATA_DIR = "."
-OUTPUT_TXT = "results/output/wrapper_resultados.txt"
-OUTPUT_NPY = "results/output/wrapper_resultados.npy"
+OUTPUT_TXT = "results/output/ga_resultados.txt"
+OUTPUT_NPY = "results/output/ga_resultados.npy"
 
 # ==========================
 # PARÂMETROS DO GA
 # ==========================
 
-POP_SIZE = 20
-GENERATIONS = 20
+POP_SIZE = 30
+GENERATIONS = 30
 MUTATION_RATE = 0.01
+TORNEIO_SIZE = 3
+AMOSTRA_BUSCA = 7000
 
 
 # ==========================
@@ -52,7 +55,6 @@ def fitness(individual, X, y):
     acc = accuracy_score(y_val, pred)
 
     feature_ratio = len(selected) / 784
-
     return 0.9 * acc + 0.1 * (1 - feature_ratio)
 
 
@@ -61,7 +63,6 @@ def fitness(individual, X, y):
 # ==========================
 
 def executar_ga(X, y):
-
     population = np.random.randint(
         0,
         2,
@@ -71,8 +72,7 @@ def executar_ga(X, y):
     best = None
     best_fit = -1
 
-    for _ in range(GENERATIONS):
-
+    for g in range(GENERATIONS):
         fitnesses = np.array(
             [fitness(ind, X, y) for ind in population]
         )
@@ -87,8 +87,8 @@ def executar_ga(X, y):
 
         while len(nova_pop) < POP_SIZE:
 
-            pai1 = population[np.random.randint(POP_SIZE)]
-            pai2 = population[np.random.randint(POP_SIZE)]
+            pai1 = selecao_torneio(population, fitness)
+            pai2 = selecao_torneio(population, fitness)
 
             ponto = np.random.randint(1, 784)
 
@@ -97,13 +97,12 @@ def executar_ga(X, y):
             )
 
             mutacao = np.random.rand(784) < MUTATION_RATE
-
             filho[mutacao] = 1 - filho[mutacao]
 
             nova_pop.append(filho)
 
         population = np.array(nova_pop)
-
+        print(f"Geração {g+1}/{GENERATIONS} concluída. Melhor Fitness atual: {best_fit:.4f}")
     return best
 
 
@@ -120,14 +119,11 @@ def main():
         X_test
     )
 
-    # usa amostra para reduzir custo
-    X_ga = X_train_norm[:5000]
-    y_ga = y_train[:5000]
+    x_ga = X_train_norm[:AMOSTRA_BUSCA]
+    y_ga = y_train[:AMOSTRA_BUSCA]
 
     inicio_busca = time.time()
-
     best = executar_ga(X_ga, y_ga)
-
     tempo_busca = time.time() - inicio_busca
 
     selected = np.where(best == 1)[0]
@@ -138,13 +134,10 @@ def main():
     clf = DecisionTreeClassifier(random_state=1)
 
     inicio_treino = time.time()
-
     clf.fit(X_train_sel, y_train)
-
     tempo_treino = time.time() - inicio_treino
 
     pred = clf.predict(X_test_sel)
-
     acuracia = accuracy_score(y_test, pred)
 
     relatorio = classification_report(
@@ -166,8 +159,9 @@ def main():
     salvar_txt(dados, OUTPUT_TXT)
     salvar_npy(dados, OUTPUT_NPY)
 
+    print(f"\nResultados Finais:")
     print(f"Acurácia: {acuracia:.4f}")
-    print(f"Features: {len(selected)}")
+    print(f"Features Selecionadas: {len(selected)} ({len(selected) / 784 * 100:.2f}%)")
     print(f"Tempo busca: {tempo_busca:.2f}s")
 
 
